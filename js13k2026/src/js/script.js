@@ -40,6 +40,7 @@ const
     } = init(),
     BOUNCE_AMPLITUDE = 3,
     BOUNCE_SPEED = 10,
+    BREAK_DURATION = 7,
     BREAK_MESSAGES = ['HUNGRY CUSTOMERS INCOMING. GET READY TO SCOOP THAT POOP!', 'FRESH POOP. HUNGRY CUSTOMERS. TASTE THE RAINBOW.', 'BUSINESS IS BOOMIN’ UNICORNS ARE POOPIN’ TIME TO GET SCOOPIN’'],
     BROWN = ['#8B5A2B', '#4A2E12'],
     CODE_BROWN = ['WE’VE GOT A CODE BROWN!', 'WE DON’T SERVE CHOCOLATE!'],
@@ -55,11 +56,10 @@ const
         '#FFF',
         '#000'
     ],
-    COUNTER_BASE_H = 30,
     COUNTER_MID_H = 30,
     COUNTER_TOP_H = 21,
-    COUNTER_TOP_Y = canvas.height - (COUNTER_BASE_H + COUNTER_MID_H + COUNTER_TOP_H),
-    COUNTER_Y = canvas.height - 21,
+    COUNTER_TOP_Y = canvas.height - (COUNTER_MID_H + COUNTER_MID_H + COUNTER_TOP_H),
+    COUNTER_Y = canvas.height - COUNTER_TOP_H,
     DELIVER_R = 42,
     // Path builders for each facial expression, keyed by expression name; 'neutral' is the default fallback
     FACES = {
@@ -101,7 +101,6 @@ const
     GAME_OVER_DURATION = 18,
     INSPECTOR_CATCH_R = 24,
     INSPECTOR_COOLDOWN = 20,
-    PICKUP_R = 42,
     PLAYER_MAX_Y = COUNTER_TOP_Y + 24,
     PLAYER_REACH_Y = 60,
     PLAYER_SPEED = 260,
@@ -146,7 +145,7 @@ const
         textAlign: 'center',
         width: canvas.width - 20,
         x: canvas.width / 2,
-        y: canvas.height - COUNTER_BASE_H / 2
+        y: canvas.height - COUNTER_MID_H / 2
     }),
     game = {
         loop: null,
@@ -207,7 +206,9 @@ initGamepad();
 
 // Determine if the player is using a gamepad and if so, what index it is
 window.addEventListener('gamepadconnected', (evt) => {
-    cachedGamepadIndex = evt.gamepad.index;
+    if (evt.gamepad.axes.length) {
+        cachedGamepadIndex = evt.gamepad.index;
+    }
 });
 
 window.addEventListener('gamepaddisconnected', (evt) => {
@@ -861,7 +862,7 @@ function advanceRound () {
     game.statusTimer = 0;
     game.ui.status.text = '';
     game.onBreak = true;
-    game.breakTimer = 7;
+    game.breakTimer = BREAK_DURATION;
     game.roundColor = roundColor();
     game.ui.break.text = BREAK_MESSAGES[floor(rnd() * BREAK_MESSAGES.length)];
 }
@@ -1133,7 +1134,7 @@ function tryAction () {
     const unicorn = UNICORNS.find((u) => dist({
         x: game.player.x,
         y: game.player.y - PLAYER_REACH_Y
-    }, u) < PICKUP_R);
+    }, u) < DELIVER_R);
 
     if (unicorn && game.carrying.length < 3) {
         const isBadScoop = game.round >= POOP_SERVE_MIN_ROUND && game.poopCooldown <= 0 && rnd() < POOP_SERVE_CHANCE;
@@ -1337,6 +1338,35 @@ game.player = Sprite({
     y: (UNICORN_Y + COUNTER_Y) / 2
 });
 
+// Draws a full-circle rainbow "clock" centered on screen; progress 0..1 wipes it away counterclockwise, starting full and ending empty
+function drawRainbow (progress) {
+    const
+        bandWidth = 10,
+        cx = canvas.width / 2,
+        cy = canvas.height / 2,
+        outerR = bandWidth * RAINBOW.length,
+        remaining = 1 - min(1, max(0, progress)),
+        startAngle = -PI / 2,
+        endAngle = startAngle - remaining * TAU;
+
+    context.save();
+    context.beginPath();
+    context.moveTo(cx, cy);
+    context.arc(cx, cy, outerR + bandWidth / 2, startAngle, endAngle, true);
+    context.closePath();
+    context.clip();
+
+    RAINBOW.forEach(([fill], i) => {
+        context.beginPath();
+        context.strokeStyle = fill;
+        context.lineWidth = bandWidth;
+        context.arc(cx, cy, outerR - i * bandWidth - bandWidth / 2, 0, TAU);
+        context.stroke();
+    });
+
+    context.restore();
+}
+
 // Start the game loop
 game.loop = GameLoop({
     render () {
@@ -1349,6 +1379,10 @@ game.loop = GameLoop({
         context.fillRect(0, 0, canvas.width, canvas.height);
         renderReceipt(context);
         drawCanopy(context, canvas.width);
+
+        if (game.onBreak) {
+            drawRainbow(1 - game.breakTimer / BREAK_DURATION);
+        }
 
         // Draw dumped scoops left behind on the floor
         game.spills.forEach((s) => {
@@ -1517,10 +1551,10 @@ game.loop = GameLoop({
 
         // Draw the counter: a 3-layer bar along the bottom of the screen (drawn after the player so it renders in front)
         context.fillStyle = COLORS[5];
-        context.fillRect(0, canvas.height - COUNTER_BASE_H, canvas.width, COUNTER_BASE_H);
+        context.fillRect(0, canvas.height - COUNTER_MID_H, canvas.width, COUNTER_MID_H);
 
         context.fillStyle = COLORS[3];
-        context.fillRect(0, canvas.height - COUNTER_BASE_H - COUNTER_MID_H, canvas.width, COUNTER_MID_H);
+        context.fillRect(0, canvas.height - COUNTER_MID_H - COUNTER_MID_H, canvas.width, COUNTER_MID_H);
 
         context.fillStyle = COLORS[4];
         context.fillRect(0, COUNTER_TOP_Y, canvas.width, COUNTER_TOP_H);

@@ -1869,9 +1869,10 @@
       } = init$1(),
       BOUNCE_AMPLITUDE = 3,
       BOUNCE_SPEED = 10,
+      BREAK_DURATION = 7,
       BREAK_MESSAGES = ['HUNGRY CUSTOMERS INCOMING. GET READY TO SCOOP THAT POOP!', 'FRESH POOP. HUNGRY CUSTOMERS. TASTE THE RAINBOW.', 'BUSINESS IS BOOMIN’ UNICORNS ARE POOPIN’ TIME TO GET SCOOPIN’'],
       BROWN = ['#8B5A2B', '#4A2E12'],
-      CODE_BROWN = 'WE’VE GOT A CODE BROWN!',
+      CODE_BROWN = ['WE’VE GOT A CODE BROWN!', 'WE DON’T SERVE CHOCOLATE!'],
       // Indices: 0 BACKGROUND, 1 CLIPBOARD, 2 CONE, 3 COUNTER_BASE, 4 COUNTER_TOP, 5 FLOOR, 6 GREY, 7 WHITE, 8 BLACK
       COLORS = [
           '#866F9B',
@@ -1884,11 +1885,10 @@
           '#FFF',
           '#000'
       ],
-      COUNTER_BASE_H = 30,
       COUNTER_MID_H = 30,
       COUNTER_TOP_H = 21,
-      COUNTER_TOP_Y = canvas.height - (COUNTER_BASE_H + COUNTER_MID_H + COUNTER_TOP_H),
-      COUNTER_Y = canvas.height - 21,
+      COUNTER_TOP_Y = canvas.height - (COUNTER_MID_H + COUNTER_MID_H + COUNTER_TOP_H),
+      COUNTER_Y = canvas.height - COUNTER_TOP_H,
       DELIVER_R = 42,
       // Path builders for each facial expression, keyed by expression name; 'neutral' is the default fallback
       FACES = {
@@ -1926,10 +1926,10 @@
       FLY_HOVER_TIME = 3,
       FLY_MIN_ROUND = 3,
       FLY_SPEED = 70,
+      GAME_OVER = ['THE POOP HAS HIT THE FAN!', 'THAT’S ONE WAY TO FLUSH A CAREER!', 'WELL, THAT STINKS!'],
       GAME_OVER_DURATION = 18,
       INSPECTOR_CATCH_R = 24,
       INSPECTOR_COOLDOWN = 20,
-      PICKUP_R = 42,
       PLAYER_MAX_Y = COUNTER_TOP_Y + 24,
       PLAYER_REACH_Y = 60,
       PLAYER_SPEED = 260,
@@ -1964,7 +1964,7 @@
           y: UNICORN_Y
       })),
       // Shared factory for UI text entries: defaults to white fill + centered anchor
-      uiText = (opts) => factory$7({
+      uiText = () => factory$7({
           anchor: {
               x: 0.5,
               y: 0.5
@@ -1974,23 +1974,16 @@
           textAlign: 'center',
           width: canvas.width - 20,
           x: canvas.width / 2,
-          y: canvas.height - COUNTER_BASE_H / 2,
-          ...opts
+          y: canvas.height - COUNTER_MID_H / 2
       }),
       game = {
           loop: null,
           muted: false,
           started: false,
           ui: {
-              break: uiText({
-                  text: BREAK_MESSAGES[0]
-              }),
-              over: uiText({
-                  text: 'THAT’S ONE WAY TO FLUSH A CAREER! PRESS N TO SCOOP AGAIN'
-              }),
-              status: uiText({
-                  text: ''
-              })
+              break: uiText(),
+              over: uiText(),
+              status: uiText()
           }
       },
       // Music controller to manage background music playback
@@ -2550,13 +2543,17 @@
           coneCenterY = (coneTopY + coneTipY) / 2;
       let rowY = boardY + rowH / 2;
 
-      // Shadow rectangle, offset for depth
-      ctx.fillStyle = COLORS[5];
-      ctx.fillRect(boardX - 3 + 6, boardY - 3 + 6, boardW + 6, boardH + 6);
+      // Drop shadow for depth
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetX = 6;
+      ctx.shadowOffsetY = 6;
 
       // Board frame
       ctx.fillStyle = fontColor;
       ctx.fillRect(boardX - 3, boardY - 3, boardW + 6, boardH + 6);
+      ctx.restore();
       ctx.fillStyle = COLORS[7];
       ctx.fillRect(boardX, boardY, boardW, boardH);
 
@@ -2688,8 +2685,11 @@
       game.customers = [];
       game.inspector = null;
       game.inspectorCooldown = INSPECTOR_COOLDOWN;
+      game.flies = null;
+      game.statusTimer = 0;
+      game.ui.status.text = '';
       game.onBreak = true;
-      game.breakTimer = 7;
+      game.breakTimer = BREAK_DURATION;
       game.roundColor = roundColor();
       game.ui.break.text = BREAK_MESSAGES[floor(rnd() * BREAK_MESSAGES.length)];
   }
@@ -2961,7 +2961,7 @@
       const unicorn = UNICORNS.find((u) => dist({
           x: game.player.x,
           y: game.player.y - PLAYER_REACH_Y
-      }, u) < PICKUP_R);
+      }, u) < DELIVER_R);
 
       if (unicorn && game.carrying.length < 3) {
           const isBadScoop = game.round >= POOP_SERVE_MIN_ROUND && game.poopCooldown <= 0 && rnd() < POOP_SERVE_CHANCE;
@@ -2972,7 +2972,7 @@
 
           if (isBadScoop) {
               game.poopCooldown = POOP_SERVE_COOLDOWN;
-              showStatus(CODE_BROWN);
+              showStatus(CODE_BROWN[floor(rnd() * CODE_BROWN.length)]);
           }
       }
   }
@@ -3054,7 +3054,7 @@
               y: rnd() < 0.5 ? UNICORN_Y + PLAYER_REACH_Y : PLAYER_MAX_Y,
               yDir: rnd() < 0.5 ? 1 : -1
           });
-          showStatus('IT’S THE HEALTH INSPECTOR! EVERYONE ACT NORMAL');
+          showStatus('UH-OH! THE HEALTH INSPECTOR IS HERE!');
       }
   }
 
@@ -3096,7 +3096,7 @@
           };
 
           game.flies.radius = max(...game.flies.dots.map((d) => d.r));
-          showStatus('OH CRAP. WE’VE GOT FLIES!');
+          showStatus('OH NO! WE’RE ATTRACTING FLIES!');
           soundFx('flies');
       }
   }
@@ -3165,6 +3165,35 @@
       y: (UNICORN_Y + COUNTER_Y) / 2
   });
 
+  // Draws a full-circle rainbow "clock" centered on screen; progress 0..1 wipes it away counterclockwise, starting full and ending empty
+  function drawRainbow (progress) {
+      const
+          bandWidth = 10,
+          cx = canvas.width / 2,
+          cy = canvas.height / 2,
+          outerR = bandWidth * RAINBOW.length,
+          remaining = 1 - min(1, max(0, progress)),
+          startAngle = -PI / 2,
+          endAngle = startAngle - remaining * TAU;
+
+      context.save();
+      context.beginPath();
+      context.moveTo(cx, cy);
+      context.arc(cx, cy, outerR + bandWidth / 2, startAngle, endAngle, true);
+      context.closePath();
+      context.clip();
+
+      RAINBOW.forEach(([fill], i) => {
+          context.beginPath();
+          context.strokeStyle = fill;
+          context.lineWidth = bandWidth;
+          context.arc(cx, cy, outerR - i * bandWidth - bandWidth / 2, 0, TAU);
+          context.stroke();
+      });
+
+      context.restore();
+  }
+
   // Start the game loop
   game.loop = GameLoop({
       render () {
@@ -3177,6 +3206,10 @@
           context.fillRect(0, 0, canvas.width, canvas.height);
           renderReceipt(context);
           drawCanopy(context, canvas.width);
+
+          if (game.onBreak) {
+              drawRainbow(1 - game.breakTimer / BREAK_DURATION);
+          }
 
           // Draw dumped scoops left behind on the floor
           game.spills.forEach((s) => {
@@ -3345,10 +3378,10 @@
 
           // Draw the counter: a 3-layer bar along the bottom of the screen (drawn after the player so it renders in front)
           context.fillStyle = COLORS[5];
-          context.fillRect(0, canvas.height - COUNTER_BASE_H, canvas.width, COUNTER_BASE_H);
+          context.fillRect(0, canvas.height - COUNTER_MID_H, canvas.width, COUNTER_MID_H);
 
           context.fillStyle = COLORS[3];
-          context.fillRect(0, canvas.height - COUNTER_BASE_H - COUNTER_MID_H, canvas.width, COUNTER_MID_H);
+          context.fillRect(0, canvas.height - COUNTER_MID_H - COUNTER_MID_H, canvas.width, COUNTER_MID_H);
 
           context.fillStyle = COLORS[4];
           context.fillRect(0, COUNTER_TOP_Y, canvas.width, COUNTER_TOP_H);
@@ -3388,8 +3421,6 @@
               if (game.breakTimer <= 0) {
                   game.onBreak = false;
               }
-
-              return;
           }
 
 
@@ -3462,7 +3493,7 @@
           spawnTimer += dt;
           game.elapsed += dt;
 
-          if (game.customers.length < game.maxAtOnce && spawnTimer > spawnInterval) {
+          if (!game.onBreak && game.customers.length < game.maxAtOnce && spawnTimer > spawnInterval) {
               spawnTimer = 0;
               spawnCustomer();
           }
@@ -3498,7 +3529,9 @@
           }
 
           // Spawn and move the health inspector
-          trySpawnInspector(dt);
+          if (!game.onBreak) {
+              trySpawnInspector(dt);
+          }
 
           if (game.inspector) {
               const
@@ -3540,7 +3573,7 @@
                   }
 
                   setScore(game.score - 3);
-                  addReceiptItem('Cleaning Fee', -3);
+                  addReceiptItem('Sanitation Violation', -3);
                   inspector.annoyedTimer = 2 + rnd();
 
                   return false;
@@ -3549,9 +3582,9 @@
               // Catch the player: fine them $10 and confiscate their carried scoop
               if (dist(game.player, inspector) < INSPECTOR_CATCH_R && game.carrying.length > 0) {
                   game.carrying = [];
-                  addReceiptItem('Notice of Violation', -10);
+                  addReceiptItem('Food Safety Violation', -10);
                   setScore(game.score - 10);
-                  showStatus('YOU’RE IN DEEP DOO-DOO NOW!');
+                  showStatus('VIOLATION! THIS DOO ISN’T FDA APPROVED!');
                   soundFx('caught');
 
                   game.inspector = null;
@@ -3567,7 +3600,9 @@
           }
 
           // Move/update the fly swarm: seek the next un-visited spill, hover over it, then despawn off-screen
-          trySpawnFlies(dt);
+          if (!game.onBreak) {
+              trySpawnFlies(dt);
+          }
 
           if (game.flies) {
               const swarm = game.flies;
@@ -3613,7 +3648,7 @@
               if (game.carrying.length && game.carrying[game.carrying.length - 1] !== BROWN && dist(game.player, swarm) < FLY_CATCH_R + swarm.radius + game.player.width / 2) {
                   game.carrying[game.carrying.length - 1] = BROWN;
                   soundFx('flies');
-                  showStatus(CODE_BROWN);
+                  showStatus(CODE_BROWN[floor(rnd() * CODE_BROWN.length)]);
               }
 
               // Despawn once it has drifted off the left edge with nowhere left to go
@@ -3627,6 +3662,7 @@
           if (game.customers.some((c) => !c.served && c.x <= -20)) {
               game.over = true;
               game.overTimer = GAME_OVER_DURATION;
+              game.ui.over.text = `${GAME_OVER[floor(rnd() * GAME_OVER.length)]} PRESS N TO SCOOP AGAIN`;
               if (!game.muted) {
                   music.play('over', false);
               }

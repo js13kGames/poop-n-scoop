@@ -7,10 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="dist\" />
     <Folder Include="assets\" />
     <Folder Include="wwwroot\dist\" />
-    <Folder Include="wwwroot\js\" />
     <Folder Include="zip\" />
   </ItemGroup>
 
