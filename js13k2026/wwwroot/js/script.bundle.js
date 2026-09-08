@@ -2023,10 +2023,17 @@
           if (audio[effect]) {
               audio.zzfx(...audio[effect]);
           }
+      },
+      tutorial = {
+          dropped: false,
+          moved: false,
+          served: false
       };
 
   let
+      actionButtonLabel = 'SPACE BAR',
       cachedGamepadIndex = -1,
+      dropButtonLabel = 'X',
       spawnTimer = 0;
 
   // Init gamepad and keyboard input
@@ -2035,14 +2042,48 @@
 
   // Determine if the player is using a gamepad and if so, what index it is
   window.addEventListener('gamepadconnected', (evt) => {
-      cachedGamepadIndex = evt.gamepad.index;
+      if (evt.gamepad.axes.length) {
+          const isPlayStation = (/dualshock|dualsense|playstation|054c/iu).test(evt.gamepad.id);
+
+          cachedGamepadIndex = evt.gamepad.index;
+          actionButtonLabel = isPlayStation ? '✕' : 'A';
+          dropButtonLabel = isPlayStation ? '▢' : 'X';
+      }
   });
 
   window.addEventListener('gamepaddisconnected', (evt) => {
       if (evt.gamepad.index === cachedGamepadIndex) {
           cachedGamepadIndex = -1;
+          actionButtonLabel = 'SPACEBAR';
+          dropButtonLabel = 'X';
       }
   });
+
+  /*
+   * Displays the next pending tutorial hint (if any) in the status message area; keeps it
+   * visible by refreshing statusTimer each frame. Returns true while a hint is showing.
+   */
+  function updateTutorial (moving) {
+      if (!tutorial.moved) {
+          if (moving) {
+              tutorial.moved = true;
+          } else {
+              game.ui.status.text = 'USE THE ARROW KEYS OR LEFT STICK TO MOVE AROUND THE SHOP';
+              game.statusTimer = 1;
+
+              return true;
+          }
+      }
+
+      if (!tutorial.served) {
+          game.ui.status.text = `PRESS ${actionButtonLabel} TO GET A SCOOP AND SERVE THE CUSTOMER`;
+          game.statusTimer = 1;
+
+          return true;
+      }
+
+      return false;
+  }
 
   // Decrements entity[key] by dt, clamped at 0
   function tickDown (entity, key, dt) {
@@ -2765,6 +2806,8 @@
           return;
       }
 
+      tutorial.dropped = true;
+
       game.spills.push({
           color: game.carrying.pop(),
           visits: 0,
@@ -2934,6 +2977,7 @@
                   payout = base + tip;
 
               target.served = true;
+              tutorial.served = true;
               game.carrying = [];
               game.player.deliverTimer = 2.5;
               game.served += 1;
@@ -2952,8 +2996,9 @@
           }
 
           if (wrongTarget) {
+              tutorial.served = true;
               wrongTarget.annoyedTimer = 2.5;
-              showStatus(FAIL_MESSAGES[floor(rnd() * FAIL_MESSAGES.length)]);
+              showStatus(tutorial.dropped ? FAIL_MESSAGES[floor(rnd() * FAIL_MESSAGES.length)] : `WRONG ORDER! PRESS ${dropButtonLabel} TO DROP THAT SCOOP`);
               soundFx('wrong');
           }
       }
@@ -3463,6 +3508,8 @@
           if (abs(stickY) > DEADZONE) {
               dy += stickY;
           }
+
+          updateTutorial(Boolean(dx || dy));
 
           if (dx || dy) {
               const len = hypot(dx, dy);
